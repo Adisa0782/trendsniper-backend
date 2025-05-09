@@ -22,6 +22,7 @@ app.post('/analyze-multi', async (req, res) => {
       return res.status(400).json({ error: 'Missing content' });
     }
 
+    // Send the content to OpenAI for analysis
     const response = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{
@@ -55,7 +56,16 @@ Content: """${content}"""`,
       switch (label.trim().toLowerCase()) {
         case 'product':
           if (currentItem.name) items.push(currentItem);
-          currentItem = { name: value, url: '', category: '', score: 0.7, adPlatform: '', adAngle: '', targetAudience: '', adScript: '' };
+          currentItem = {
+            name: value,
+            url: '',
+            category: '',
+            score: 0.7,
+            adPlatform: '',
+            adAngle: '',
+            targetAudience: '',
+            adScript: ''
+          };
           break;
         case 'url':
           currentItem.url = value;
