@@ -1,11 +1,11 @@
-require('dotenv').config();
+import 'dotenv/config';
+import OpenAI from 'openai';
 
-const { OpenAI } = require('openai');
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-async function analyzeWithAI(text) {
+export async function analyzeWithAI(text) {
   const prompt = `
 You are an expert product scanner.
 
@@ -34,7 +34,8 @@ Respond in JSON like:
   try {
     const result = JSON.parse(jsonString);
     return result;
-  } catch {
+  } catch (err) {
+    console.error("JSON Parse Error:", err);
     return {
       isAdOrProduct: false,
       name: "Unknown",
@@ -42,5 +43,3 @@ Respond in JSON like:
     };
   }
 }
-
-module.exports = analyzeWithAI;
