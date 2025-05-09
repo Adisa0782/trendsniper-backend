@@ -26,40 +26,61 @@ app.post('/analyze-multi', async (req, res) => {
       model: 'gpt-3.5-turbo',
       messages: [{
         role: 'user',
-        content: `Analyze the content below and extract any ad or product mentions. 
-Return each item in this structured format exactly:
+        content: `Analyze the content below and extract any ad or product mentions.
 
-Product: [name]
-URL: [url if any]
-Confidence: [score between 0 and 1]
+For each product or ad found, return the following:
 
-Only include real products or ads that sound legit.
+Product: [name]  
+URL: [url if any]  
+Category: [e.g., beauty, fitness, tech, health]  
+Confidence: [score from 0 to 1]  
+AdPlatform: [e.g., TikTok, Facebook, Instagram]  
+AdAngle: [e.g., emotional, problem-solving, trendy, curiosity]  
+TargetAudience: [e.g., Women 18–34, Pet owners, Tech lovers]  
+AdScript: [1-line viral ad script idea]
 
-Content: """${content}"""`
+Content: """${content}"""`,
       }]
     });
 
     const aiText = response.choices[0].message.content;
     const lines = aiText.split('\n').filter(line => line.trim());
     const items = [];
-
     let currentItem = {};
 
     lines.forEach(line => {
-      if (line.toLowerCase().startsWith('product:')) {
-        if (currentItem.name) items.push(currentItem);
-        currentItem = {
-          name: line.split(':')[1]?.trim() || 'Unnamed',
-          url: '',
-          score: 0.7
-        };
-      } else if (line.toLowerCase().startsWith('url:')) {
-        currentItem.url = line.split(':')[1]?.trim() || '';
-      } else if (line.toLowerCase().startsWith('confidence:')) {
-        const score = parseFloat(line.split(':')[1]?.trim());
-        currentItem.score = isNaN(score) ? 0.7 : score;
+      const [label, ...rest] = line.split(':');
+      const value = rest.join(':').trim();
+
+      switch (label.trim().toLowerCase()) {
+        case 'product':
+          if (currentItem.name) items.push(currentItem);
+          currentItem = { name: value, url: '', category: '', score: 0.7, adPlatform: '', adAngle: '', targetAudience: '', adScript: '' };
+          break;
+        case 'url':
+          currentItem.url = value;
+          break;
+        case 'category':
+          currentItem.category = value;
+          break;
+        case 'confidence':
+          currentItem.score = parseFloat(value) || 0.7;
+          break;
+        case 'adplatform':
+          currentItem.adPlatform = value;
+          break;
+        case 'adangle':
+          currentItem.adAngle = value;
+          break;
+        case 'targetaudience':
+          currentItem.targetAudience = value;
+          break;
+        case 'adscript':
+          currentItem.adScript = value;
+          break;
       }
     });
+
     if (currentItem.name) items.push(currentItem);
 
     res.json({ items, raw: aiText });
@@ -71,5 +92,5 @@ Content: """${content}"""`
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`TrendSniper AI backend running on port ${PORT}`);
 });
