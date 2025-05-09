@@ -6,7 +6,7 @@ import { OpenAI } from 'openai';
 dotenv.config();
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 const app = express();
@@ -15,42 +15,61 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Route for analyzing multiple ads or product texts
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content } = req.body;
-    const chunks = content.split('\n').filter(line => line.trim().length > 10);
+    if (!content) {
+      return res.status(400).json({ error: 'Missing content' });
+    }
 
-    const items = await Promise.all(
-      chunks.map(async (chunk) => {
-        const gptRes = await openai.chat.completions.create({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'user',
-              content: `Is this a winning product ad or not? Just return the product name and a confidence score (0-1):\n\n${chunk}`
-            }
-          ],
-        });
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [{
+        role: 'user',
+        content: `Analyze the content below and extract any ad or product mentions. 
+Return each item in this structured format exactly:
 
-        const answer = gptRes.choices[0].message.content;
-        const match = answer.match(/(.*?)(?:\s+-\s+Score:|,?\s*confidence\s*[:\-]?\s*)([0-9.]+)/i);
+Product: [name]
+URL: [url if any]
+Confidence: [score between 0 and 1]
 
-        return {
-          name: match ? match[1].trim() : answer.trim(),
-          score: match ? parseFloat(match[2]) : 0.5,
-          url: 'https://tiktok.com', // or dynamically detect if needed
+Only include real products or ads that sound legit.
+
+Content: """${content}"""`
+      }]
+    });
+
+    const aiText = response.choices[0].message.content;
+    const lines = aiText.split('\n').filter(line => line.trim());
+    const items = [];
+
+    let currentItem = {};
+
+    lines.forEach(line => {
+      if (line.toLowerCase().startsWith('product:')) {
+        if (currentItem.name) items.push(currentItem);
+        currentItem = {
+          name: line.split(':')[1]?.trim() || 'Unnamed',
+          url: '',
+          score: 0.7
         };
-      })
-    );
+      } else if (line.toLowerCase().startsWith('url:')) {
+        currentItem.url = line.split(':')[1]?.trim() || '';
+      } else if (line.toLowerCase().startsWith('confidence:')) {
+        const score = parseFloat(line.split(':')[1]?.trim());
+        currentItem.score = isNaN(score) ? 0.7 : score;
+      }
+    });
+    if (currentItem.name) items.push(currentItem);
 
-    res.json({ items });
-  } catch (error) {
-    console.error("Error analyzing content:", error);
-    res.status(500).json({ error: "AI analysis failed" });
+    res.json({ items, raw: aiText });
+
+  } catch (err) {
+    console.error('AI Error:', err.message);
+    res.status(500).json({ error: 'Failed to analyze content' });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`TrendSniper backend running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
