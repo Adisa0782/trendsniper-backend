@@ -6,7 +6,7 @@ import { OpenAI } from 'openai';
 dotenv.config();
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const app = express();
@@ -15,42 +15,42 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Route for analyzing multiple ads or product texts
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content } = req.body;
-    if (!content) {
-      return res.status(400).json({ error: 'Missing content' });
-    }
+    const chunks = content.split('\n').filter(line => line.trim().length > 10);
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [{
-        role: 'user',
-        content: `Analyze this content and extract any ad or product mentions. 
-        For each mention, return a product/ad name, a URL if present, and how confident you are it's a real ad (0 to 1).
-        Content: """${content}"""`
-      }]
-    });
+    const items = await Promise.all(
+      chunks.map(async (chunk) => {
+        const gptRes = await openai.chat.completions.create({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'user',
+              content: `Is this a winning product ad or not? Just return the product name and a confidence score (0-1):\n\n${chunk}`
+            }
+          ],
+        });
 
-    const aiText = response.choices[0].message.content;
+        const answer = gptRes.choices[0].message.content;
+        const match = answer.match(/(.*?)(?:\s+-\s+Score:|,?\s*confidence\s*[:\-]?\s*)([0-9.]+)/i);
 
-    res.json({
-      items: [
-        {
-          name: 'Example Product from AI',
-          url: 'https://example.com',
-          score: 0.87
-        }
-      ],
-      raw: aiText
-    });
+        return {
+          name: match ? match[1].trim() : answer.trim(),
+          score: match ? parseFloat(match[2]) : 0.5,
+          url: 'https://tiktok.com', // or dynamically detect if needed
+        };
+      })
+    );
 
-  } catch (err) {
-    console.error('AI Error:', err.message);
-    res.status(500).json({ error: 'Failed to analyze content' });
+    res.json({ items });
+  } catch (error) {
+    console.error("Error analyzing content:", error);
+    res.status(500).json({ error: "AI analysis failed" });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`TrendSniper backend running on port ${PORT}`);
 });
