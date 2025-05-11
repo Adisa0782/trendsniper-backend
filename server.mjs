@@ -15,7 +15,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// Simple leaderboard in memory
+// In-memory leaderboard
 const leaderboard = {};
 
 app.post('/analyze-multi', async (req, res) => {
@@ -88,5 +88,10 @@ app.get('/leaderboard', (req, res) => {
     .slice(0, 10)
     .map(([name, count]) => ({ name, count }));
 
-  res.json({ topProductsole.log(`TrendSniper AI backend running on port ${PORT}`);
+  res.json({ top });
+});
+
+// Server
+app.listen(PORT, () => {
+  console.log(`TrendSniper AI backend running on port ${PORT}`);
 });
