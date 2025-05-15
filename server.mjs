@@ -12,12 +12,14 @@ app.use(cors());
 app.use(express.json());
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENROUTER_API_KEY, // From .env
+  baseURL: 'https://openrouter.ai/api/v1'
 });
 
-// In-memory leaderboard
+// In-memory leaderboard structure
 const leaderboard = {};
 
+// ANALYZE ROUTE
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
@@ -45,7 +47,7 @@ Each item should include:
 `;
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'openai/gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7
     });
@@ -60,16 +62,24 @@ Each item should include:
       return res.status(500).json({ error: 'AI returned invalid JSON', raw: aiText });
     }
 
-    // Limit to 3 items if not Pro
+    // Limit results for free users
     if (!pro && items.length > 3) {
       items = items.slice(0, 3);
     }
 
-    // Update leaderboard
+    // Update leaderboard with name + category
     items.forEach(item => {
       if (item.name) {
         const key = item.name.trim().toLowerCase();
-        leaderboard[key] = (leaderboard[key] || 0) + 1;
+        if (!leaderboard[key]) {
+          leaderboard[key] = {
+            name: item.name,
+            count: 1,
+            category: item.category || 'Other'
+          };
+        } else {
+          leaderboard[key].count += 1;
+        }
       }
     });
 
@@ -81,17 +91,21 @@ Each item should include:
   }
 });
 
-// Leaderboard route
+// LEADERBOARD ROUTE
 app.get('/leaderboard', (req, res) => {
   const top = Object.entries(leaderboard)
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 10)
-    .map(([name, count]) => ({ name, count }));
+    .map(([_, data]) => ({
+      name: data.name,
+      count: data.count,
+      category: data.category
+    }));
 
   res.json({ top });
 });
 
-// Server
+// START SERVER
 app.listen(PORT, () => {
   console.log(`TrendSniper AI backend running on port ${PORT}`);
 });
