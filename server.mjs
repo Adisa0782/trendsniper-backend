@@ -97,9 +97,12 @@ Only return valid JSON in an array.
     res.status(500).json({ error: 'Failed to analyze content' });
   }
 });
+
+// Test route to confirm server is live
 app.get('/', (req, res) => {
-  res.send('TrendSniper backend is live.');
+  res.send('TrendSniper backend is live!');
 });
+
 // Leaderboard route
 app.get('/leaderboard', (req, res) => {
   const top = Object.entries(leaderboard)
