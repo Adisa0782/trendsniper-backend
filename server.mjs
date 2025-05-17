@@ -18,7 +18,12 @@ const openai = new OpenAI({
 
 const leaderboard = {};
 
-// ANALYZE ROUTE
+// Home route (for Render health check)
+app.get('/', (req, res) => {
+  res.send('TrendSniper backend is live!');
+});
+
+// Analyze multi
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
@@ -46,7 +51,7 @@ Extract up to 10 product or ad insights and return them as JSON objects in this 
 }
 
 Only return valid JSON in an array.
-`;
+    `;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4' : 'openchat/openchat-3.5',
@@ -64,12 +69,12 @@ Only return valid JSON in an array.
       return res.status(500).json({ error: 'AI returned invalid JSON', raw: aiText });
     }
 
-    // Limit for Free users
+    // Limit results for free users
     if (!pro && items.length > 3) {
       items = items.slice(0, 3);
     }
 
-    // Update leaderboard with name + category
+    // Leaderboard tracking
     items.forEach(item => {
       if (item.name) {
         const key = item.name.trim().toLowerCase();
@@ -93,7 +98,7 @@ Only return valid JSON in an array.
   }
 });
 
-// LEADERBOARD ROUTE
+// Leaderboard route
 app.get('/leaderboard', (req, res) => {
   const top = Object.entries(leaderboard)
     .sort((a, b) => b[1].count - a[1].count)
