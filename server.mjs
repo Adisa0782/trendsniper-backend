@@ -6,7 +6,7 @@ import { OpenAI } from 'openai';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT; // ✅ DO NOT hardcode 3000 for Render
+const PORT = process.env.PORT;
 
 app.use(cors());
 app.use(express.json());
@@ -18,18 +18,16 @@ const openai = new OpenAI({
 
 const leaderboard = {};
 
-// Health check route for Render
+// HEALTH CHECK (important for Render)
 app.get('/', (req, res) => {
-  res.send('TrendSniper backend is live!');
+  res.send('TrendSniper backend is live.');
 });
 
-// Analyze multi
+// ANALYZE PRODUCTS/ADS
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
-    if (!content) {
-      return res.status(400).json({ error: 'Missing content' });
-    }
+    if (!content) return res.status(400).json({ error: 'Missing content' });
 
     const prompt = `
 You are an expert AI ad strategist.
@@ -53,7 +51,7 @@ Extract up to 10 product or ad insights and return them as JSON objects in this 
 }
 
 Only return valid JSON in an array.
-    `;
+`;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4' : 'openchat/openchat-3.5',
@@ -71,10 +69,12 @@ Only return valid JSON in an array.
       return res.status(500).json({ error: 'AI returned invalid JSON', raw: aiText });
     }
 
+    // Limit for Free users
     if (!pro && items.length > 3) {
       items = items.slice(0, 3);
     }
 
+    // Leaderboard update
     items.forEach(item => {
       if (item.name) {
         const key = item.name.trim().toLowerCase();
@@ -98,7 +98,7 @@ Only return valid JSON in an array.
   }
 });
 
-// Leaderboard route
+// LEADERBOARD
 app.get('/leaderboard', (req, res) => {
   const top = Object.entries(leaderboard)
     .sort((a, b) => b[1].count - a[1].count)
@@ -112,6 +112,7 @@ app.get('/leaderboard', (req, res) => {
   res.json({ top });
 });
 
+// START SERVER (Render picks the port from env)
 app.listen(PORT, () => {
   console.log(`TrendSniper AI backend running on port ${PORT}`);
 });
