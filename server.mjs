@@ -18,40 +18,41 @@ const openai = new OpenAI({
 
 const leaderboard = {};
 
-// HEALTH CHECK (important for Render)
+// Health check route
 app.get('/', (req, res) => {
   res.send('TrendSniper backend is live.');
 });
 
-// ANALYZE PRODUCTS/ADS
+// AI scan and analysis route
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
     if (!content) return res.status(400).json({ error: 'Missing content' });
 
     const prompt = `
-You are an expert AI ad strategist.
+You are an expert AI ad analyst.
 
-Based on the following content:
+Based on the content below:
 """${content}"""
 
-Extract up to 10 product or ad insights and return them as JSON objects in this format:
+Extract up to 10 ad or product insights. For each one, return a JSON object in this format:
+
 {
-  "name": "Wireless Earbuds",
+  "name": "Product Name",
   "url": "https://example.com",
-  "category": "Tech",
-  "confidence": 0.92,
+  "category": "[Pick from: Tech, Beauty & Skincare, Home & Kitchen, Fitness & Wellness, Baby & Kids, Pets, Fashion & Accessories, Tools & DIY, Car Accessories, Health Products, Viral TikTok Items, Office & WFH, Seasonal & Holiday, Other]",
+  "confidence": 0.93,
   "adPlatform": "TikTok",
   "adAngle": "Problem-solving",
-  "targetAudience": "Students, 18–25",
-  "adScript": "Tired of your old earbuds? This one will change your sound forever.",
-  "summary": "Strong pain-point targeting with a fast hook. Great for TikTok.",
-  "verdict": "Run this ad — it has high potential for viral growth.",
-  "advice": "Use quick before/after visuals and target mobile users 18–30 with urgency-based copy."
+  "targetAudience": "18–35, students, mobile users",
+  "adScript": "Tired of your charger breaking? This one is unbreakable.",
+  "summary": "Strong TikTok-style hook with viral potential.",
+  "verdict": "Worth testing — strong creative angle and good targeting.",
+  "advice": "Use fast visual cuts and urgency-driven captions."
 }
 
-Only return valid JSON in an array.
-`;
+Only return valid JSON in an array. Do not include any explanation — just the array.
+    `;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4' : 'openchat/openchat-3.5',
@@ -69,12 +70,12 @@ Only return valid JSON in an array.
       return res.status(500).json({ error: 'AI returned invalid JSON', raw: aiText });
     }
 
-    // Limit for Free users
+    // Limit for free users
     if (!pro && items.length > 3) {
       items = items.slice(0, 3);
     }
 
-    // Leaderboard update
+    // Update leaderboard
     items.forEach(item => {
       if (item.name) {
         const key = item.name.trim().toLowerCase();
@@ -98,7 +99,7 @@ Only return valid JSON in an array.
   }
 });
 
-// LEADERBOARD
+// Leaderboard route
 app.get('/leaderboard', (req, res) => {
   const top = Object.entries(leaderboard)
     .sort((a, b) => b[1].count - a[1].count)
@@ -112,7 +113,6 @@ app.get('/leaderboard', (req, res) => {
   res.json({ top });
 });
 
-// START SERVER (Render picks the port from env)
 app.listen(PORT, () => {
   console.log(`TrendSniper AI backend running on port ${PORT}`);
 });
