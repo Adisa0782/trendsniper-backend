@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
-    if (!content) return res.status(400).json({ error: 'Missing content' });
+    if (!content) return res.(400).json({ error: 'Missing content' });
 
     const prompt = `
 You are an expert AI ad strategist.
