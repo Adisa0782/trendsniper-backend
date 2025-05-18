@@ -18,12 +18,10 @@ const openai = new OpenAI({
 
 const leaderboard = {};
 
-// Home route
 app.get('/', (req, res) => {
   res.send('TrendSniper backend is live.');
 });
 
-// Analyze content
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
@@ -32,43 +30,45 @@ app.post('/analyze-multi', async (req, res) => {
       return res.status(400).json({ error: 'Content too short for analysis' });
     }
 
-    const cleanContent = content.replace(/[^a-zA-Z0-9\s.,;:!?'"()\-]/g, ' ').slice(0, 4000);
-
     const prompt = `
 You are an expert AI ad strategist.
 
-Based on the following content:
-\"\"\"${cleanContent}\"\"\"
+Analyze the following content:
+"""${content.slice(0, 4000)}"""
 
-Extract up to ${pro ? 10 : 3} product or ad insights and return them as JSON array:
-[
-  {
-    "name": "Wireless Earbuds",
-    "url": "https://example.com",
-    "category": "Tech",
-    "confidence": 0.92,
-    "adPlatform": "TikTok",
-    "adAngle": "Problem-solving",
-    "targetAudience": "Students, 18–25",
-    "adScript": "Tired of your old earbuds? This one will change your sound forever.",
-    "summary": "Strong pain-point targeting with a fast hook. Great for TikTok.",
-    "verdict": "Run this ad — it has high potential for viral growth.",
-    "advice": "Use quick before/after visuals and target mobile users 18–30 with urgency-based copy."
-  }
-]
+Extract up to ${pro ? 10 : 3} product or ad insights and return them as a JSON array ONLY.
 
-Only return the array. No explanation, no notes, no code blocks.
+Each item must include:
+- name
+- url
+- category
+- confidence
+- adPlatform
+- adAngle
+- targetAudience
+- adScript
+- summary
+- verdict
+- advice
+
+Only return valid JSON array. No extra explanation, markdown, or code blocks.
 `;
 
-    const response = await openai.chat.completions.create({
-    model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free'
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4
-    });
+    let response;
+    try {
+      response = await openai.chat.completions.create({
+        model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.4
+      });
+    } catch (err) {
+      console.error('AI failed:', err.response?.data || err.message);
+      return res.status(500).json({ error: 'AI request failed. Check OpenRouter key or balance.' });
+    }
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
-    if (!aiText) {
-      console.error("AI returned no content.");
+    if (!aiText || aiText.length < 10) {
+      console.error('AI returned empty or short content');
       return res.status(500).json({ error: 'AI returned empty response.' });
     }
 
@@ -85,7 +85,7 @@ Only return the array. No explanation, no notes, no code blocks.
       items = items.slice(0, 3);
     }
 
-    // Update leaderboard
+    // Track leaderboard
     items.forEach(item => {
       if (item?.name) {
         const key = item.name.trim().toLowerCase();
@@ -104,12 +104,11 @@ Only return the array. No explanation, no notes, no code blocks.
     res.json({ items });
 
   } catch (err) {
-    console.error('Fatal error in analyze-multi:', err.response?.data || err.message || err);
-    res.status(500).json({ error: 'Failed to analyze content. Server error.' });
+    console.error('Fatal server error:', err.message || err);
+    res.status(500).json({ error: 'Server error during analysis.' });
   }
 });
 
-// Leaderboard route
 app.get('/leaderboard', (req, res) => {
   const top = Object.entries(leaderboard)
     .sort((a, b) => b[1].count - a[1].count)
