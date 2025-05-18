@@ -61,7 +61,7 @@ Only return the array. No explanation, no notes, no code blocks.
 `;
 
     const response = await openai.chat.completions.create({
-      model: pro ? 'openai/gpt-4' : 'mistralai/mistral-7b-instruct:free',
+    model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free'
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4
     });
