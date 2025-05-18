@@ -6,7 +6,7 @@ import { OpenAI } from 'openai';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -23,12 +23,13 @@ app.get('/', (req, res) => {
   res.send('TrendSniper backend is live.');
 });
 
-// Analyze multi
+// Analyze endpoint
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
-    if (!content || content.length < 20) {
-      return res.status(400).json({ error: 'Failed to analyze content' });
+
+    if (!content || content.trim().length < 30) {
+      return res.status(400).json({ error: 'Content is too short to analyze' });
     }
 
     const prompt = `
@@ -38,22 +39,23 @@ Based on the following content:
 """${content}"""
 
 Extract up to 10 product or ad insights and return them as JSON objects in this format:
-{
-  "name": "Wireless Earbuds",
-  "url": "https://example.com",
-  "category": "Tech",
-  "confidence": 0.92,
-  "adPlatform": "TikTok",
-  "adAngle": "Problem-solving",
-  "targetAudience": "Students, 18–25",
-  "adScript": "Tired of your old earbuds? This one will change your sound forever.",
-  "summary": "Strong pain-point targeting with a fast hook. Great for TikTok.",
-  "verdict": "Run this ad — it has high potential for viral growth.",
-  "advice": "Use quick before/after visuals and target mobile users 18–30 with urgency-based copy."
-}
-
-Only return valid JSON in an array.
-`;
+[
+  {
+    "name": "Wireless Earbuds",
+    "url": "https://example.com",
+    "category": "Tech",
+    "confidence": 0.92,
+    "adPlatform": "TikTok",
+    "adAngle": "Problem-solving",
+    "targetAudience": "Students, 18–25",
+    "adScript": "Tired of your old earbuds? This one will change your sound forever.",
+    "summary": "Strong pain-point targeting with a fast hook. Great for TikTok.",
+    "verdict": "Run this ad — it has high potential for viral growth.",
+    "advice": "Use quick before/after visuals and target mobile users 18–30 with urgency-based copy."
+  }
+]
+Return only valid JSON.
+    `;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4' : 'openchat/openchat-3.5',
@@ -62,17 +64,13 @@ Only return valid JSON in an array.
     });
 
     const aiText = response.choices[0].message.content;
-
     let items;
+
     try {
       items = JSON.parse(aiText);
     } catch (err) {
-      console.error('JSON Parse Error:', err.message);
+      console.error('AI returned invalid JSON:', err.message);
       return res.status(500).json({ error: 'AI returned invalid JSON', raw: aiText });
-    }
-
-    if (!Array.isArray(items)) {
-      return res.status(500).json({ error: 'AI output was not an array', raw: aiText });
     }
 
     if (!pro && items.length > 3) {
@@ -80,43 +78,34 @@ Only return valid JSON in an array.
     }
 
     // Track leaderboard
-    items.forEach((item) => {
+    items.forEach(item => {
       if (item.name) {
         const key = item.name.trim().toLowerCase();
-        if (!leaderboard[key]) {
-          leaderboard[key] = {
-            name: item.name,
-            count: 1,
-            category: item.category || 'Other',
-          };
-        } else {
-          leaderboard[key].count += 1;
-        }
+        leaderboard[key] = leaderboard[key] || {
+          name: item.name,
+          count: 0,
+          category: item.category || 'Other',
+        };
+        leaderboard[key].count += 1;
       }
     });
 
     res.json({ items, raw: aiText });
+
   } catch (err) {
-    console.error('AI Error:', err.message);
+    console.error('Server error:', err.message);
     res.status(500).json({ error: 'Failed to analyze content' });
   }
 });
 
 // Leaderboard route
 app.get('/leaderboard', (req, res) => {
-  const top = Object.entries(leaderboard)
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 10)
-    .map(([_, data]) => ({
-      name: data.name,
-      count: data.count,
-      category: data.category,
-    }));
-
+  const top = Object.values(leaderboard)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
   res.json({ top });
 });
 
 app.listen(PORT, () => {
-  console.log(`TrendSniper AI backend running on port ${PORT}`);
+  console.log(`TrendSniper backend running on port ${PORT}`);
 });
-
