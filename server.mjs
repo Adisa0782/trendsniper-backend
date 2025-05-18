@@ -28,8 +28,8 @@ app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro } = req.body;
 
-    if (!content || content.trim().length < 30) {
-      return res.status(400).json({ error: 'Content is too short to analyze' });
+    if (!content) {
+  return res.status(400).json({ error: 'Missing content' });
     }
 
     const prompt = `
