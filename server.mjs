@@ -31,28 +31,30 @@ app.post('/analyze-multi', async (req, res) => {
 
     const cleanContent = content.replace(/[^a-zA-Z0-9\s.,;:!?'"()-]/g, ' ').slice(0, 4000);
     const prompt = `
-You are an expert AI ad strategist.
+You are a strict JSON generator.
 
-Based on the following content:
-"""${cleanContent}"""
+Given the following content:
+"""${content}"""
 
-Extract up to 10 product or ad insights and return them as JSON objects in this format:
-{
-  "name": "Wireless Earbuds",
-  "url": "https://example.com",
-  "category": "Tech",
-  "confidence": 0.92,
-  "adPlatform": "TikTok",
-  "adAngle": "Problem-solving",
-  "targetAudience": "Students, 18–25",
-  "adScript": "Tired of your old earbuds? This one will change your sound forever.",
-  "summary": "Strong pain-point targeting with a fast hook. Great for TikTok.",
-  "verdict": "Run this ad — it has high potential for viral growth.",
-  "advice": "Use quick before/after visuals and target mobile users 18–30 with urgency-based copy."
-}
+Extract up to 10 products or ad insights in **pure JSON array format** ONLY. Do not include any explanation, commentary, or extra text. Only return an array like this:
+[
+  {
+    "name": "Wireless Earbuds",
+    "url": "https://example.com",
+    "category": "Tech",
+    "confidence": 0.92,
+    "adPlatform": "TikTok",
+    "adAngle": "Problem-solving",
+    "targetAudience": "Students, 18–25",
+    "adScript": "Tired of your old earbuds? This one will change your sound forever.",
+    "summary": "Strong pain-point targeting with a fast hook. Great for TikTok.",
+    "verdict": "Run this ad — it has high potential for viral growth.",
+    "advice": "Use quick before/after visuals and target mobile users 18–30 with urgency-based copy."
+  }
+]
 
-Only return valid JSON in an array.
-    `;
+ONLY return the array. Do not include anything else.
+`;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4' : 'mistralai/mistral-7b-instruct:free',
