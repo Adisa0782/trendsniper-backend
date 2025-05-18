@@ -4,12 +4,16 @@ import bodyParser from 'body-parser';
 import { config } from 'dotenv';
 import { OpenAI } from 'openai';
 
-config();
+config(); // Load .env
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || 'your-openai-key-here' });
+// OpenRouter or OpenAI support
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: 'https://openrouter.ai/api/v1' // Important for OpenRouter
+});
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '2mb' }));
@@ -17,6 +21,7 @@ app.use(bodyParser.json({ limit: '2mb' }));
 // POST /analyze-multi
 app.post('/analyze-multi', async (req, res) => {
   const { content, pro } = req.body;
+
   if (!content || content.trim().length < 30) {
     return res.status(400).json({ error: 'Content too short for analysis' });
   }
@@ -63,9 +68,9 @@ Return only the array. No commentary. No wrapping.
 
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'openrouter/auto', // or another model like 'mistralai/mixtral-8x7b'
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4,
+      temperature: 0.4
     });
 
     const raw = completion.choices[0].message.content.trim();
@@ -75,27 +80,26 @@ Return only the array. No commentary. No wrapping.
       if (!Array.isArray(items)) throw new Error('Not an array');
       return res.json({ items });
     } catch (jsonErr) {
-      console.error('Invalid JSON:', jsonErr.message);
-      return res.status(500).json({
-        error: 'AI returned invalid JSON',
-        raw,
-      });
+      console.error('Invalid JSON from AI:', jsonErr.message);
+      return res.status(500).json({ error: 'AI returned invalid JSON', raw });
     }
+
   } catch (err) {
-    console.error('AI error:', err.message);
-    return res.status(500).json({ error: 'Failed to analyze content' });
+    const details = err?.response?.data || err.message || 'Unknown AI error';
+    console.error('AI error:', details);
+    return res.status(500).json({ error: 'Failed to analyze content', details });
   }
 });
 
 // License verification
 app.get('/verify', (req, res) => {
   const code = req.query.code;
-  const validCodes = ['PURL2024']; // Add more codes if needed
+  const validCodes = ['PURL2024']; // Add more if needed
   const valid = validCodes.includes(code);
   res.json({ valid });
 });
 
-// Leaderboard (dummy)
+// Leaderboard
 app.get('/leaderboard', (req, res) => {
   res.json({
     top: [
@@ -107,5 +111,5 @@ app.get('/leaderboard', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`TrendSniper AI backend running on http://localhost:${port}`);
+  console.log(`TrendSniper backend live on http://localhost:${port}`);
 });
