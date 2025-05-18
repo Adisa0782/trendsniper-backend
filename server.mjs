@@ -30,13 +30,23 @@ app.post('/analyze-multi', async (req, res) => {
     }
 
     const cleanContent = content.replace(/[^a-zA-Z0-9\s.,;:!?'"()-]/g, ' ').slice(0, 4000);
-    const prompt = `
+  const prompt = `
 You are a strict JSON generator.
 
 Given the following content:
 """${content}"""
 
-Extract up to 10 products or ad insights in **pure JSON array format** ONLY. Do not include any explanation, commentary, or extra text. Only return an array like this:
+Extract up to 10 products or ad insights in JSON array format ONLY. Each item must include:
+- name
+- url
+- category
+- confidence (0.0 to 1.0)
+- adPlatform
+- adAngle
+- targetAudience
+- adScript
+
+Return ONLY a JSON array like this:
 [
   {
     "name": "Wireless Earbuds",
@@ -46,14 +56,10 @@ Extract up to 10 products or ad insights in **pure JSON array format** ONLY. Do 
     "adPlatform": "TikTok",
     "adAngle": "Problem-solving",
     "targetAudience": "Students, 18–25",
-    "adScript": "Tired of your old earbuds? This one will change your sound forever.",
-    "summary": "Strong pain-point targeting with a fast hook. Great for TikTok.",
-    "verdict": "Run this ad — it has high potential for viral growth.",
-    "advice": "Use quick before/after visuals and target mobile users 18–30 with urgency-based copy."
+    "adScript": "Tired of your old earbuds? This one will change your sound forever."
   }
 ]
-
-ONLY return the array. Do not include anything else.
+No commentary. No markdown. Only a valid array.
 `;
 
     const response = await openai.chat.completions.create({
