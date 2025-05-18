@@ -4,15 +4,14 @@ import bodyParser from 'body-parser';
 import { config } from 'dotenv';
 import { OpenAI } from 'openai';
 
-config(); // Load .env
+config(); // Load .env file
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// OpenRouter or OpenAI support
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1' // Important for OpenRouter
+  baseURL: 'https://openrouter.ai/api/v1' // Critical for OpenRouter
 });
 
 app.use(cors());
@@ -68,7 +67,7 @@ Return only the array. No commentary. No wrapping.
 
   try {
     const completion = await openai.chat.completions.create({
-      model: 'openrouter/auto', // or another model like 'mistralai/mixtral-8x7b'
+      model: 'openrouter/auto', // You can replace with a specific model like 'mistralai/mixtral-8x7b'
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4
     });
@@ -80,13 +79,13 @@ Return only the array. No commentary. No wrapping.
       if (!Array.isArray(items)) throw new Error('Not an array');
       return res.json({ items });
     } catch (jsonErr) {
-      console.error('Invalid JSON from AI:', jsonErr.message);
+      console.error('Invalid JSON:', jsonErr.message);
       return res.status(500).json({ error: 'AI returned invalid JSON', raw });
     }
 
   } catch (err) {
-    const details = err?.response?.data || err.message || 'Unknown AI error';
-    console.error('AI error:', details);
+    const details = err?.response?.data || err.message || 'Unknown error';
+    console.error('OpenRouter error:', details);
     return res.status(500).json({ error: 'Failed to analyze content', details });
   }
 });
@@ -94,12 +93,12 @@ Return only the array. No commentary. No wrapping.
 // License verification
 app.get('/verify', (req, res) => {
   const code = req.query.code;
-  const validCodes = ['PURL2024']; // Add more if needed
+  const validCodes = ['PURL2024'];
   const valid = validCodes.includes(code);
   res.json({ valid });
 });
 
-// Leaderboard
+// Leaderboard dummy
 app.get('/leaderboard', (req, res) => {
   res.json({
     top: [
@@ -111,5 +110,5 @@ app.get('/leaderboard', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`TrendSniper backend live on http://localhost:${port}`);
+  console.log(`TrendSniper AI backend running at http://localhost:${port}`);
 });
