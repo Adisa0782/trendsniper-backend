@@ -32,14 +32,10 @@ app.post('/analyze-multi', async (req, res) => {
 
     const limit = pro ? 10 : 3;
 
-    const prompt = type === 'products'
-      ? `
-You are an expert in identifying viral winning products from ad copy or product page content.
+    const prompt = `
+You are an expert in ${type === 'products' ? 'detecting viral winning products' : 'ad analysis'}.
 
-Analyze this text:
-"""${content.slice(0, 4000)}"""
-
-Return up to ${limit} winning product insights in a valid JSON array with fields:
+Analyze the following text and return ONLY a valid JSON array of up to ${limit} items. Each item must include:
 - name
 - url
 - category
@@ -51,27 +47,11 @@ Return up to ${limit} winning product insights in a valid JSON array with fields
 - summary
 - verdict
 - advice
-Only return valid JSON array. No markdown, no explanations.
-`
-      : `
-You are an AI ad expert trained to detect ad strategies from sales pages or landing pages.
 
-Analyze the following text:
+Text:
 """${content.slice(0, 4000)}"""
 
-Return up to ${limit} ad-related insights in a valid JSON array with fields:
-- name
-- url
-- category
-- confidence
-- adPlatform
-- adAngle
-- targetAudience
-- adScript
-- summary
-- verdict
-- advice
-Only return valid JSON array. No markdown, no explanations.
+IMPORTANT: Return ONLY a JSON array. No intro, no explanation, no markdown.
 `;
 
     const response = await openai.chat.completions.create({
@@ -87,7 +67,13 @@ Only return valid JSON array. No markdown, no explanations.
 
     let items;
     try {
-      items = JSON.parse(aiText);
+      // Attempt to extract the array even if there is text before it
+      const jsonStart = aiText.indexOf('[');
+      const jsonEnd = aiText.lastIndexOf(']');
+      const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
+
+      items = JSON.parse(jsonString);
+
       if (!Array.isArray(items)) throw new Error('Not a JSON array');
     } catch (err) {
       return res.status(500).json({
@@ -97,10 +83,12 @@ Only return valid JSON array. No markdown, no explanations.
       });
     }
 
+    // Limit if free user
     if (!pro && items.length > 3) {
       items = items.slice(0, 3);
     }
 
+    // Leaderboard tracking
     items.forEach(item => {
       if (item?.name) {
         const key = item.name.trim().toLowerCase();
@@ -116,11 +104,11 @@ Only return valid JSON array. No markdown, no explanations.
       }
     });
 
-    res.json({ items });
+    return res.json({ items });
 
   } catch (err) {
     console.error('Fatal server error:', err.message || err);
-    res.status(500).json({ error: 'Server error during analysis.' });
+    return res.status(500).json({ error: 'Server error during analysis.' });
   }
 });
 
@@ -134,7 +122,7 @@ app.get('/leaderboard', (req, res) => {
       category: data.category,
     }));
 
-  res.json({ top });
+  return res.json({ top });
 });
 
 app.listen(PORT, () => {
