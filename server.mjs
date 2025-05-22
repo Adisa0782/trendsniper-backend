@@ -30,7 +30,7 @@ app.post('/analyze-multi', async (req, res) => {
       return res.status(400).json({ error: 'Content too short for analysis' });
     }
 
-    const limit = pro ? 30 : 3;
+    const limit = pro ? 10 : 3;
 
     const prompt = type === 'products'
       ? `
