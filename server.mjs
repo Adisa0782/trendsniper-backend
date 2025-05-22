@@ -13,7 +13,7 @@ app.use(express.json());
 
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1'
+  baseURL: 'https://openrouter.ai/api/v1',
 });
 
 const leaderboard = {};
@@ -77,7 +77,7 @@ Only return valid JSON array. No markdown, no explanations.
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4
+      temperature: 0.4,
     });
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
@@ -90,7 +90,11 @@ Only return valid JSON array. No markdown, no explanations.
       items = JSON.parse(aiText);
       if (!Array.isArray(items)) throw new Error('Not a JSON array');
     } catch (err) {
-      return res.status(500).json({ error: 'AI returned invalid JSON.', raw: aiText });
+      return res.status(500).json({
+        error: 'AI returned invalid JSON.',
+        message: err.message,
+        raw: aiText,
+      });
     }
 
     if (!pro && items.length > 3) {
@@ -104,7 +108,7 @@ Only return valid JSON array. No markdown, no explanations.
           leaderboard[key] = {
             name: item.name,
             count: 1,
-            category: item.category || 'Other'
+            category: item.category || 'Other',
           };
         } else {
           leaderboard[key].count += 1;
@@ -127,13 +131,12 @@ app.get('/leaderboard', (req, res) => {
     .map(([_, data]) => ({
       name: data.name,
       count: data.count,
-      category: data.category
+      category: data.category,
     }));
 
   res.json({ top });
 });
 
 app.listen(PORT, () => {
-  console.log(`TrendSniper AI backend running on port ${PORT}`);
+  console.log(`TrendSniper AI backend running on http://localhost:${PORT}`);
 });
-
