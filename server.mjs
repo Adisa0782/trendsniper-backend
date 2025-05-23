@@ -13,7 +13,7 @@ app.use(express.json());
 
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1',
+  baseURL: 'https://openrouter.ai/api/v1'
 });
 
 const leaderboard = {};
@@ -32,10 +32,16 @@ app.post('/analyze-multi', async (req, res) => {
 
     const limit = pro ? 10 : 3;
 
-    const prompt = `
-You are an expert in ${type === 'products' ? 'detecting viral winning products' : 'ad analysis'}.
+    // === Build Prompt Dynamically Based on Type ===
+    let prompt;
+    if (type === 'products') {
+      prompt = `
+You are an expert in identifying viral winning products from ad copy or product descriptions.
 
-Analyze the following text and return ONLY a valid JSON array of up to ${limit} items. Each item must include:
+Analyze this text:
+"""${content.slice(0, 4000)}"""
+
+Return up to ${limit} winning product insights in JSON array with fields:
 - name
 - url
 - category
@@ -48,16 +54,36 @@ Analyze the following text and return ONLY a valid JSON array of up to ${limit} 
 - verdict
 - advice
 
-Text:
+Only return JSON array. No intro. No markdown.
+`;
+    } else {
+      prompt = `
+You are an AI ad analysis expert.
+
+Analyze this ad page text:
 """${content.slice(0, 4000)}"""
 
-IMPORTANT: Return ONLY a JSON array. No intro, no explanation, no markdown.
+Return up to ${limit} ad insights in JSON array with fields:
+- name
+- url
+- category
+- confidence
+- adPlatform
+- adAngle
+- targetAudience
+- adScript
+- summary
+- verdict
+- advice
+
+Only return JSON array. No intro. No markdown.
 `;
+    }
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4,
+      temperature: 0.4
     });
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
@@ -67,28 +93,26 @@ IMPORTANT: Return ONLY a JSON array. No intro, no explanation, no markdown.
 
     let items;
     try {
-      // Attempt to extract the array even if there is text before it
-      const jsonStart = aiText.indexOf('[');
-      const jsonEnd = aiText.lastIndexOf(']');
-      const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
+      const start = aiText.indexOf('[');
+      const end = aiText.lastIndexOf(']');
+      const cleanJSON = aiText.slice(start, end + 1);
+      items = JSON.parse(cleanJSON);
 
-      items = JSON.parse(jsonString);
-
-      if (!Array.isArray(items)) throw new Error('Not a JSON array');
+      if (!Array.isArray(items)) throw new Error('Not an array');
     } catch (err) {
       return res.status(500).json({
         error: 'AI returned invalid JSON.',
-        message: err.message,
         raw: aiText,
+        message: err.message
       });
     }
 
-    // Limit if free user
+    // Limit for free users
     if (!pro && items.length > 3) {
       items = items.slice(0, 3);
     }
 
-    // Leaderboard tracking
+    // Leaderboard
     items.forEach(item => {
       if (item?.name) {
         const key = item.name.trim().toLowerCase();
@@ -96,7 +120,7 @@ IMPORTANT: Return ONLY a JSON array. No intro, no explanation, no markdown.
           leaderboard[key] = {
             name: item.name,
             count: 1,
-            category: item.category || 'Other',
+            category: item.category || 'Other'
           };
         } else {
           leaderboard[key].count += 1;
@@ -119,12 +143,12 @@ app.get('/leaderboard', (req, res) => {
     .map(([_, data]) => ({
       name: data.name,
       count: data.count,
-      category: data.category,
+      category: data.category
     }));
 
   return res.json({ top });
 });
 
 app.listen(PORT, () => {
-  console.log(`TrendSniper AI backend running on http://localhost:${PORT}`);
+  console.log(`✅ TrendSniper AI backend running on http://localhost:${PORT}`);
 });
