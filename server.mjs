@@ -32,20 +32,18 @@ app.post('/analyze-multi', async (req, res) => {
 
     const limit = pro ? 10 : 3;
 
-    // === Build Prompt Dynamically Based on Type ===
-    let prompt;
-    if (type === 'products') {
-      prompt = `
-You are an expert in identifying viral winning products from ad copy or product descriptions.
+    const prompt = type === 'products'
+      ? `
+You are an expert in identifying viral winning products.
 
-Analyze this text:
+Analyze this content:
 """${content.slice(0, 4000)}"""
 
-Return up to ${limit} winning product insights in JSON array with fields:
+Return ONLY a valid JSON array (up to ${limit} items) where each item includes:
 - name
 - url
 - category
-- confidence
+- confidence (as a number between 0 and 1)
 - adPlatform
 - adAngle
 - targetAudience
@@ -54,20 +52,19 @@ Return up to ${limit} winning product insights in JSON array with fields:
 - verdict
 - advice
 
-Only return JSON array. No intro. No markdown.
-`;
-    } else {
-      prompt = `
-You are an AI ad analysis expert.
+IMPORTANT: Return ONLY a raw JSON array. No markdown, no introduction.
+`
+      : `
+You are an expert in ad strategy and landing page analysis.
 
-Analyze this ad page text:
+Analyze this content:
 """${content.slice(0, 4000)}"""
 
-Return up to ${limit} ad insights in JSON array with fields:
+Return ONLY a valid JSON array (up to ${limit} items) where each item includes:
 - name
 - url
 - category
-- confidence
+- confidence (as a number between 0 and 1)
 - adPlatform
 - adAngle
 - targetAudience
@@ -76,9 +73,8 @@ Return up to ${limit} ad insights in JSON array with fields:
 - verdict
 - advice
 
-Only return JSON array. No intro. No markdown.
+IMPORTANT: Return ONLY a raw JSON array. No markdown, no introduction.
 `;
-    }
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
@@ -93,26 +89,26 @@ Only return JSON array. No intro. No markdown.
 
     let items;
     try {
-      const start = aiText.indexOf('[');
-      const end = aiText.lastIndexOf(']');
-      const cleanJSON = aiText.slice(start, end + 1);
-      items = JSON.parse(cleanJSON);
+      const jsonStart = aiText.indexOf('[');
+      const jsonEnd = aiText.lastIndexOf(']');
+      const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
+      items = JSON.parse(jsonString);
 
-      if (!Array.isArray(items)) throw new Error('Not an array');
+      if (!Array.isArray(items)) throw new Error('Response is not a JSON array');
     } catch (err) {
       return res.status(500).json({
-        error: 'AI returned invalid JSON.',
-        raw: aiText,
-        message: err.message
+        error: 'AI returned invalid JSON',
+        message: err.message,
+        raw: aiText
       });
     }
 
-    // Limit for free users
+    // Trim extra items for free users
     if (!pro && items.length > 3) {
       items = items.slice(0, 3);
     }
 
-    // Leaderboard
+    // Track leaderboard
     items.forEach(item => {
       if (item?.name) {
         const key = item.name.trim().toLowerCase();
@@ -128,11 +124,11 @@ Only return JSON array. No intro. No markdown.
       }
     });
 
-    return res.json({ items });
+    res.json({ items });
 
   } catch (err) {
     console.error('Fatal server error:', err.message || err);
-    return res.status(500).json({ error: 'Server error during analysis.' });
+    res.status(500).json({ error: 'Server error during analysis.' });
   }
 });
 
@@ -140,15 +136,15 @@ app.get('/leaderboard', (req, res) => {
   const top = Object.entries(leaderboard)
     .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 10)
-    .map(([_, data]) => ({
-      name: data.name,
-      count: data.count,
-      category: data.category
+    .map(([_, item]) => ({
+      name: item.name,
+      count: item.count,
+      category: item.category
     }));
 
-  return res.json({ top });
+  res.json({ top });
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ TrendSniper AI backend running on http://localhost:${PORT}`);
+  console.log(`TrendSniper AI backend running at http://localhost:${PORT}`);
 });
