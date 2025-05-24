@@ -13,79 +13,49 @@ app.use(express.json());
 
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  baseURL: 'https://openrouter.ai/api/v1'
+  baseURL: 'https://openrouter.ai/api/v1',
 });
 
 const leaderboard = {};
 
-app.get('/', (req, res) => {
-  res.send('TrendSniper backend is live.');
-});
+app.get('/', (req, res) => res.send('TrendSniper backend is live.'));
 
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro, type } = req.body;
-
     if (!content || content.trim().length < 30) {
-      return res.status(400).json({ error: 'Content too short for analysis' });
+      return res.status(400).json({ error: 'Content too short for analysis.' });
     }
 
     const limit = pro ? 10 : 3;
 
-    const prompt = type === 'products'
-      ? `
+    // Custom AI prompt for accurate detection
+    const prompt = type === 'products' ? `
 You are an expert in identifying viral winning products.
-
-Analyze this content:
+Analyze the following content to detect potential high-selling products.
+Return ONLY a valid JSON array of up to ${limit} items, each with:
+- name, url, category, confidence, adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice.
+Focus on product identification, not general ads.
+Content:
 """${content.slice(0, 4000)}"""
-
-Return ONLY a valid JSON array (up to ${limit} items) where each item includes:
-- name
-- url
-- category
-- confidence (as a number between 0 and 1)
-- adPlatform
-- adAngle
-- targetAudience
-- adScript
-- summary
-- verdict
-- advice
-
-IMPORTANT: Return ONLY a raw JSON array. No markdown, no introduction.
-`
-      : `
-You are an expert in ad strategy and landing page analysis.
-
-Analyze this content:
+` : `
+You are an expert in analyzing advertisements.
+Analyze the following content for ad campaigns.
+Return ONLY a valid JSON array of up to ${limit} items, each with:
+- name, url, category, confidence, adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice.
+Focus on identifying ad campaigns, not products.
+Content:
 """${content.slice(0, 4000)}"""
-
-Return ONLY a valid JSON array (up to ${limit} items) where each item includes:
-- name
-- url
-- category
-- confidence (as a number between 0 and 1)
-- adPlatform
-- adAngle
-- targetAudience
-- adScript
-- summary
-- verdict
-- advice
-
-IMPORTANT: Return ONLY a raw JSON array. No markdown, no introduction.
 `;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4
+      temperature: 0.4,
     });
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
-    if (!aiText || aiText.length < 10) {
-      return res.status(500).json({ error: 'AI returned empty response.' });
-    }
+    if (!aiText || aiText.length < 10) return res.status(500).json({ error: 'AI returned empty response.' });
 
     let items;
     try {
@@ -93,31 +63,18 @@ IMPORTANT: Return ONLY a raw JSON array. No markdown, no introduction.
       const jsonEnd = aiText.lastIndexOf(']');
       const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
       items = JSON.parse(jsonString);
-
-      if (!Array.isArray(items)) throw new Error('Response is not a JSON array');
+      if (!Array.isArray(items)) throw new Error('Invalid JSON array');
     } catch (err) {
-      return res.status(500).json({
-        error: 'AI returned invalid JSON',
-        message: err.message,
-        raw: aiText
-      });
+      return res.status(500).json({ error: 'AI returned invalid JSON.', message: err.message, raw: aiText });
     }
 
-    // Trim extra items for free users
-    if (!pro && items.length > 3) {
-      items = items.slice(0, 3);
-    }
+    if (!pro && items.length > 3) items = items.slice(0, 3);
 
-    // Track leaderboard
     items.forEach(item => {
-      if (item?.name) {
-        const key = item.name.trim().toLowerCase();
+      const key = item?.name?.trim()?.toLowerCase();
+      if (key) {
         if (!leaderboard[key]) {
-          leaderboard[key] = {
-            name: item.name,
-            count: 1,
-            category: item.category || 'Other'
-          };
+          leaderboard[key] = { name: item.name, count: 1, category: item.category || 'Other' };
         } else {
           leaderboard[key].count += 1;
         }
@@ -125,26 +82,17 @@ IMPORTANT: Return ONLY a raw JSON array. No markdown, no introduction.
     });
 
     res.json({ items });
-
   } catch (err) {
-    console.error('Fatal server error:', err.message || err);
+    console.error('Server error:', err.message || err);
     res.status(500).json({ error: 'Server error during analysis.' });
   }
 });
 
 app.get('/leaderboard', (req, res) => {
-  const top = Object.entries(leaderboard)
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 10)
-    .map(([_, item]) => ({
-      name: item.name,
-      count: item.count,
-      category: item.category
-    }));
-
+  const top = Object.values(leaderboard)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
   res.json({ top });
 });
 
-app.listen(PORT, () => {
-  console.log(`TrendSniper AI backend running at http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`🔥 TrendSniper backend running on port ${PORT}`));
