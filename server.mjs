@@ -29,21 +29,45 @@ app.post('/analyze-multi', async (req, res) => {
 
     const limit = pro ? 10 : 3;
 
-    // Custom AI prompt for accurate detection
+    // Updated AI prompt for always returning image
     const prompt = type === 'products' ? `
 You are an expert in identifying viral winning products.
 Analyze the following content to detect potential high-selling products.
-Return ONLY a valid JSON array of up to ${limit} items, each with:
-- name, url, category, confidence, adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice.
-Focus on product identification, not general ads.
+Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
+- name: the product name.
+- url: the product URL.
+- image: a valid, real image URL (required for every item).
+- category: the product category.
+- confidence: an integer (1-100) showing your confidence level.
+- adPlatform: the ad platform (if applicable).
+- adAngle: a description of the ad's approach.
+- targetAudience: the intended audience.
+- adScript: a short ad copy or script.
+- summary: a brief analysis of the product.
+- verdict: your overall judgment.
+- advice: suggestions for improving the product or marketing.
+
+IMPORTANT: Always include a valid "image" field for each product. Do not return empty or placeholder URLs. Focus on real, usable image links.
 Content:
 """${content.slice(0, 4000)}"""
 ` : `
 You are an expert in analyzing advertisements.
-Analyze the following content for ad campaigns.
-Return ONLY a valid JSON array of up to ${limit} items, each with:
-- name, url, category, confidence, adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice.
-Focus on identifying ad campaigns, not products.
+Analyze the following content to detect high-potential ads.
+Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
+- name: the ad name.
+- url: the ad link.
+- image: a valid, real image URL (required for every item).
+- category: the ad category.
+- confidence: an integer (1-100) showing your confidence level.
+- adPlatform: the ad platform.
+- adAngle: the ad approach.
+- targetAudience: the intended audience.
+- adScript: a short ad copy or script.
+- summary: a brief analysis of the ad.
+- verdict: your overall judgment.
+- advice: suggestions for improving the ad.
+
+IMPORTANT: Always include a valid "image" field for each ad. Do not return empty or placeholder URLs. Focus on real, usable image links.
 Content:
 """${content.slice(0, 4000)}"""
 `;
@@ -55,7 +79,9 @@ Content:
     });
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
-    if (!aiText || aiText.length < 10) return res.status(500).json({ error: 'AI returned empty response.' });
+    if (!aiText || aiText.length < 10) {
+      return res.status(500).json({ error: 'AI returned empty response.' });
+    }
 
     let items;
     try {
