@@ -29,51 +29,28 @@ app.post('/analyze-multi', async (req, res) => {
 
     const limit = pro ? 10 : 3;
 
-    // Updated AI prompt for always returning image
     const prompt = type === 'products' ? `
 You are an expert in identifying viral winning products.
 Analyze the following content to detect potential high-selling products.
-Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
-- name: the product name.
-- url: the product URL.
-- image: a valid, real image URL (required for every item).
-- category: the product category.
-- confidence: an integer (1-100) showing your confidence level.
-- adPlatform: the ad platform (if applicable).
-- adAngle: a description of the ad's approach.
-- targetAudience: the intended audience.
-- adScript: a short ad copy or script.
-- summary: a brief analysis of the product.
-- verdict: your overall judgment.
-- advice: suggestions for improving the product or marketing.
-
-IMPORTANT: Always include a valid "image" field for each product. Do not return empty or placeholder URLs. Focus on real, usable image links.
+Return ONLY a valid JSON array of up to ${limit} items, each with:
+- name: product name.
+- url: product URL.
+- image: real image URL (no placeholders!).
+- category, confidence (1-100), adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice.
+IMPORTANT: Always include a real "image" field.
 Content:
 """${content.slice(0, 4000)}"""
 ` : `
-You are an expert in analyzing advertisements.
-Analyze the following content to detect high-potential ads.
-Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
-- name: the ad name.
-- url: the ad link.
-- image: a valid, real image URL (required for every item).
-- category: the ad category.
-- confidence: an integer (1-100) showing your confidence level.
-- adPlatform: the ad platform.
-- adAngle: the ad approach.
-- targetAudience: the intended audience.
-- adScript: a short ad copy or script.
-- summary: a brief analysis of the ad.
-- verdict: your overall judgment.
-- advice: suggestions for improving the ad.
-
-IMPORTANT: Always include a valid "image" field for each ad. Do not return empty or placeholder URLs. Focus on real, usable image links.
+You are an expert in analyzing ads.
+Analyze the content and return up to ${limit} items with:
+- name, url, image (real), category, confidence, adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice.
+IMPORTANT: Real images only.
 Content:
 """${content.slice(0, 4000)}"""
 `;
 
     const response = await openai.chat.completions.create({
-      model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
+      model: 'mistralai/mistral-7b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4,
     });
