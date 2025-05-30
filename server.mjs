@@ -18,7 +18,7 @@ const openai = new OpenAI({
 
 const leaderboard = {};
 
-app.get('/', (req, res) => res.send('🔥 TrendSniper backend is live!'));
+app.get('/', (req, res) => res.send('TrendSniper backend is live.'));
 
 app.post('/analyze-multi', async (req, res) => {
   try {
@@ -28,49 +28,49 @@ app.post('/analyze-multi', async (req, res) => {
     }
 
     const limit = pro ? 10 : 3;
-    const proxyUrl = 'https://trendsniper-image.onrender.com/proxy?url=';
 
-    let prompt;
-    if (type === 'products') {
-      prompt = `
+    // Updated AI prompt for always returning image
+    const prompt = type === 'products' ? `
 You are an expert in identifying viral winning products.
-Analyze the content below and return a JSON array (max ${limit} items) with:
-- name (product name)
-- url (product link)
-- image (real product image URL)
-- category
-- confidence (1-100)
-- targetAudience
-- summary
-- verdict
-- advice
-IMPORTANT: Ensure all images are real and valid URLs. Prefer high-quality images.
+Analyze the following content to detect potential high-selling products.
+Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
+- name: the product name.
+- url: the product URL.
+- image: a valid, real image URL (required for every item).
+- category: the product category.
+- confidence: an integer (1-100) showing your confidence level.
+- adPlatform: the ad platform (if applicable).
+- adAngle: a description of the ad's approach.
+- targetAudience: the intended audience.
+- adScript: a short ad copy or script.
+- summary: a brief analysis of the product.
+- verdict: your overall judgment.
+- advice: suggestions for improving the product or marketing.
+
+IMPORTANT: Always include a valid "image" field for each product. Do not return empty or placeholder URLs. Focus on real, usable image links.
 Content:
 """${content.slice(0, 4000)}"""
-      `;
-    } else if (type === 'ads') {
-      prompt = `
+` : `
 You are an expert in analyzing advertisements.
-Analyze the content below and return a JSON array (max ${limit} items) with:
-- name (ad name)
-- url (ad link)
-- image (real ad image URL)
-- category
-- confidence (1-100)
-- adPlatform
-- adAngle
-- targetAudience
-- adScript
-- summary
-- verdict
-- advice
-IMPORTANT: Ensure all images are real and valid URLs. Prefer high-quality images.
+Analyze the following content to detect high-potential ads.
+Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
+- name: the ad name.
+- url: the ad link.
+- image: a valid, real image URL (required for every item).
+- category: the ad category.
+- confidence: an integer (1-100) showing your confidence level.
+- adPlatform: the ad platform.
+- adAngle: the ad approach.
+- targetAudience: the intended audience.
+- adScript: a short ad copy or script.
+- summary: a brief analysis of the ad.
+- verdict: your overall judgment.
+- advice: suggestions for improving the ad.
+
+IMPORTANT: Always include a valid "image" field for each ad. Do not return empty or placeholder URLs. Focus on real, usable image links.
 Content:
 """${content.slice(0, 4000)}"""
-      `;
-    } else {
-      return res.status(400).json({ error: 'Invalid type: must be "products" or "ads".' });
-    }
+`;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
@@ -79,7 +79,9 @@ Content:
     });
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
-    if (!aiText) return res.status(500).json({ error: 'AI returned empty response.' });
+    if (!aiText || aiText.length < 10) {
+      return res.status(500).json({ error: 'AI returned empty response.' });
+    }
 
     let items;
     try {
@@ -89,32 +91,25 @@ Content:
       items = JSON.parse(jsonString);
       if (!Array.isArray(items)) throw new Error('Invalid JSON array');
     } catch (err) {
-      return res.status(500).json({ error: 'AI returned invalid JSON', message: err.message, raw: aiText });
+      return res.status(500).json({ error: 'AI returned invalid JSON.', message: err.message, raw: aiText });
     }
 
-    // Enforce limit at backend
-    items = items.slice(0, limit);
+    if (!pro && items.length > 3) items = items.slice(0, 3);
 
-    // Add image proxy and sanitize items
-    items = items.map(item => ({
-      ...item,
-      image: item.image ? `${proxyUrl}${encodeURIComponent(item.image)}` : 'default-placeholder.png',
-    }));
-
-    // Update leaderboard for products
-    if (type === 'products') {
-      items.forEach(item => {
-        const key = item?.name?.toLowerCase();
-        if (key) {
-          leaderboard[key] = leaderboard[key] || { name: item.name, count: 0, category: item.category || 'Other' };
+    items.forEach(item => {
+      const key = item?.name?.trim()?.toLowerCase();
+      if (key) {
+        if (!leaderboard[key]) {
+          leaderboard[key] = { name: item.name, count: 1, category: item.category || 'Other' };
+        } else {
           leaderboard[key].count += 1;
         }
-      });
-    }
+      }
+    });
 
     res.json({ items });
   } catch (err) {
-    console.error('Error:', err.message || err);
+    console.error('Server error:', err.message || err);
     res.status(500).json({ error: 'Server error during analysis.' });
   }
 });
@@ -126,6 +121,4 @@ app.get('/leaderboard', (req, res) => {
   res.json({ top });
 });
 
-app.listen(PORT, () => {
-  console.log(`🔥 TrendSniper backend running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🔥 TrendSniper backend running on port ${PORT}`));
