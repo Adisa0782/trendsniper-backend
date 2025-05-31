@@ -50,7 +50,7 @@ app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro, type } = req.body;
 
-    // Validate Input
+    // 🔥 Validate Input
     if (!content || content.trim().length < 30) {
       return res.status(400).json({ error: 'Content too short for analysis.' });
     }
@@ -74,7 +74,9 @@ Content:
 """${content.slice(0, 4000)}"""
 `;
 
-    // 🔥 Call OpenAI or OpenRouter
+    console.log('📤 Sending prompt to AI:', prompt.slice(0, 200));
+
+    // 🔥 Call OpenAI/OpenRouter
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
@@ -82,8 +84,11 @@ Content:
     });
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
+    console.log('🌐 AI Response:', aiText?.slice(0, 200));
+
     if (!aiText || aiText.length < 10) {
-      return res.status(500).json({ error: 'AI returned empty response.' });
+      console.warn('⚠ AI returned empty or incomplete response.');
+      return res.status(500).json({ error: 'AI returned empty response or too short.' });
     }
 
     // 🔥 Safe JSON Extraction and Parsing
@@ -91,12 +96,13 @@ Content:
     try {
       const jsonStart = aiText.indexOf('[');
       const jsonEnd = aiText.lastIndexOf(']');
-      if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON array found');
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON array found in AI response.');
       const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
       items = JSON.parse(jsonString);
-      if (!Array.isArray(items)) throw new Error('Invalid JSON array');
+      if (!Array.isArray(items)) throw new Error('Invalid JSON array format.');
     } catch (err) {
-      console.error('AI response parsing error:', aiText);
+      console.error('❌ AI JSON parsing error:', err.message);
+      console.error('❌ Raw AI text:', aiText);
       return res.status(500).json({ error: 'AI returned invalid JSON.', message: err.message, raw: aiText });
     }
 
@@ -116,8 +122,8 @@ Content:
 
     res.json({ items });
   } catch (err) {
-    console.error('Server error during analysis:', err.message || err);
-    res.status(500).json({ error: 'Server error during analysis.' });
+    console.error('🔥 Server error during analysis:', err.message || err);
+    res.status(500).json({ error: 'Server error during analysis.', message: err.message });
   }
 });
 
