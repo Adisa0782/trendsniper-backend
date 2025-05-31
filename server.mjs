@@ -11,67 +11,72 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// OpenAI or OpenRouter configuration
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: 'https://openrouter.ai/api/v1',
 });
 
+// Leaderboard tracking object
 const leaderboard = {};
 
+// Home route (basic health check)
 app.get('/', (req, res) => res.send('TrendSniper backend is live.'));
 
+// Analyze multiple ads or products
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro, type } = req.body;
+
+    // Input validation
     if (!content || content.trim().length < 30) {
       return res.status(400).json({ error: 'Content too short for analysis.' });
     }
 
     const limit = pro ? 10 : 3;
 
-    // Updated AI prompt for always returning image
+    // Build prompt for AI based on type
     const prompt = type === 'products' ? `
 You are an expert in identifying viral winning products.
 Analyze the following content to detect potential high-selling products.
 Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
-- name: the product name.
-- url: the product URL.
-- image: a valid, real image URL (required for every item).
-- category: the product category.
-- confidence: an integer (1-100) showing your confidence level.
-- adPlatform: the ad platform (if applicable).
-- adAngle: a description of the ad's approach.
-- targetAudience: the intended audience.
-- adScript: a short ad copy or script.
-- summary: a brief analysis of the product.
-- verdict: your overall judgment.
-- advice: suggestions for improving the product or marketing.
-
-IMPORTANT: Always include a valid "image" field for each product. Do not return empty or placeholder URLs. Focus on real, usable image links.
+- name
+- url
+- image
+- category
+- confidence
+- adPlatform
+- adAngle
+- targetAudience
+- adScript
+- summary
+- verdict
+- advice
+IMPORTANT: ONLY output a JSON array. No explanations or extra text.
 Content:
 """${content.slice(0, 4000)}"""
 ` : `
 You are an expert in analyzing advertisements.
 Analyze the following content to detect high-potential ads.
 Return ONLY a valid JSON array of up to ${limit} items, each with the following fields:
-- name: the ad name.
-- url: the ad link.
-- image: a valid, real image URL (required for every item).
-- category: the ad category.
-- confidence: an integer (1-100) showing your confidence level.
-- adPlatform: the ad platform.
-- adAngle: the ad approach.
-- targetAudience: the intended audience.
-- adScript: a short ad copy or script.
-- summary: a brief analysis of the ad.
-- verdict: your overall judgment.
-- advice: suggestions for improving the ad.
-
-IMPORTANT: Always include a valid "image" field for each ad. Do not return empty or placeholder URLs. Focus on real, usable image links.
+- name
+- url
+- image
+- category
+- confidence
+- adPlatform
+- adAngle
+- targetAudience
+- adScript
+- summary
+- verdict
+- advice
+IMPORTANT: ONLY output a JSON array. No explanations or extra text.
 Content:
 """${content.slice(0, 4000)}"""
 `;
 
+    // Call OpenAI API
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
@@ -85,17 +90,21 @@ Content:
 
     let items;
     try {
+      // Extract and parse JSON safely
       const jsonStart = aiText.indexOf('[');
       const jsonEnd = aiText.lastIndexOf(']');
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON array found');
       const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
       items = JSON.parse(jsonString);
       if (!Array.isArray(items)) throw new Error('Invalid JSON array');
     } catch (err) {
+      console.error('AI response parsing error:', aiText);
       return res.status(500).json({ error: 'AI returned invalid JSON.', message: err.message, raw: aiText });
     }
 
     if (!pro && items.length > 3) items = items.slice(0, 3);
 
+    // Update leaderboard
     items.forEach(item => {
       const key = item?.name?.trim()?.toLowerCase();
       if (key) {
@@ -109,11 +118,12 @@ Content:
 
     res.json({ items });
   } catch (err) {
-    console.error('Server error:', err.message || err);
+    console.error('Server error during analysis:', err);
     res.status(500).json({ error: 'Server error during analysis.' });
   }
 });
 
+// Leaderboard route
 app.get('/leaderboard', (req, res) => {
   const top = Object.values(leaderboard)
     .sort((a, b) => b.count - a.count)
