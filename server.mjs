@@ -12,71 +12,102 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// OpenAI or OpenRouter Configuration
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: 'https://openrouter.ai/api/v1',
 });
 
-// Leaderboard Tracking
 const leaderboard = {};
 
-// 🔥 Health Check Route
-app.get('/', (req, res) => res.send('🔥 TrendSniper backend is live!'));
+app.get('/', (req, res) => res.send('🔥 TrendSniper AI Backend Live'));
 
-// 🔥 Proxy Route to Bypass CORS Restrictions
 app.get('/proxy', async (req, res) => {
   const targetUrl = req.query.url;
-  if (!targetUrl) return res.status(400).send('Missing target URL.');
-
+  if (!targetUrl) return res.status(400).send('Missing URL');
   try {
     const response = await fetch(targetUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Referer': 'https://www.aliexpress.com',
-      },
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': 'https://www.aliexpress.com'
+      }
     });
-    if (!response.ok) throw new Error(`Proxy fetch failed: ${response.status}`);
+    if (!response.ok) throw new Error(`Proxy failed: ${response.status}`);
     res.set('Content-Type', response.headers.get('Content-Type'));
     response.body.pipe(res);
   } catch (err) {
-    console.error('Proxy fetch error:', err.message);
+    console.error('❌ Proxy error:', err.message);
     res.status(500).send('Proxy fetch failed.');
   }
 });
 
-// 🔥 Core Analyze-Multi Endpoint
+// 🔥 ANALYZE MULTI
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro, type } = req.body;
-
-    // 🔥 Validate Input
-    if (!content || content.trim().length < 30) {
-      return res.status(400).json({ error: 'Content too short for analysis.' });
+    if (!content || content.length < 30) {
+      return res.status(400).json({ error: 'Too little content' });
     }
 
     const limit = pro ? 10 : 3;
+
     const prompt = type === 'products' ? `
-You are an expert in identifying viral winning products.
-Analyze the following content to detect potential high-selling products.
-Return ONLY a valid JSON array of up to ${limit} items, each with:
-- name, url, image, category, confidence, adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice
-IMPORTANT: ONLY output a JSON array. No explanations or extra text.
-Content:
+You are an AI expert in eCommerce and viral product trends.
+
+Analyze the following text to identify high-potential WINNING PRODUCTS.
+Each winning product should:
+- Have recent sales momentum
+- Target a specific audience
+- Use effective ad angles or wow factor
+- Have viral potential or uniqueness
+
+For each product, return:
+{
+  "name": "",
+  "url": "",
+  "image": "",
+  "category": "",
+  "confidence": 0-100,
+  "targetAudience": "",
+  "adAngle": "",
+  "adScript": "",
+  "verdict": "Winning" | "Too Late" | "Low Potential",
+  "advice": "",
+  "insights": ""
+}
+
+Analyze the following content and return a VALID JSON ARRAY of max ${limit} items.
+
+CONTENT:
 """${content.slice(0, 4000)}"""
 ` : `
-You are an expert in analyzing advertisements.
-Analyze the following content to detect high-potential ads.
-Return ONLY a valid JSON array of up to ${limit} items, each with:
-- name, url, image, category, confidence, adPlatform, adAngle, targetAudience, adScript, summary, verdict, advice
-IMPORTANT: ONLY output a JSON array. No explanations or extra text.
-Content:
+You are an AI ad analyst.
+
+From the text below, detect ads with high potential to convert. Each should include:
+- What product or service is being advertised
+- Target audience
+- Ad script style
+- Ad angle (emotional, wow factor, practical)
+- Advice to improve it
+
+Return up to ${limit} items formatted as a VALID JSON ARRAY with:
+{
+  "name": "",
+  "url": "",
+  "image": "",
+  "category": "",
+  "confidence": 0-100,
+  "targetAudience": "",
+  "adAngle": "",
+  "adScript": "",
+  "verdict": "Good Ad" | "Average" | "Low Potential",
+  "advice": "",
+  "insights": ""
+}
+
+CONTENT:
 """${content.slice(0, 4000)}"""
 `;
 
-    console.log('📤 Sending prompt to AI:', prompt.slice(0, 200));
-
-    // 🔥 Call OpenAI/OpenRouter
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
@@ -84,50 +115,42 @@ Content:
     });
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
-    console.log('🌐 AI Response:', aiText?.slice(0, 200));
-
     if (!aiText || aiText.length < 10) {
-      console.warn('⚠ AI returned empty or incomplete response.');
-      return res.status(500).json({ error: 'AI returned empty response or too short.' });
+      return res.status(500).json({ error: 'AI returned blank.' });
     }
 
-    // 🔥 Safe JSON Extraction and Parsing
+    // Extract JSON Array
     let items;
     try {
       const jsonStart = aiText.indexOf('[');
       const jsonEnd = aiText.lastIndexOf(']');
-      if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON array found in AI response.');
       const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
       items = JSON.parse(jsonString);
-      if (!Array.isArray(items)) throw new Error('Invalid JSON array format.');
+      if (!Array.isArray(items)) throw new Error('Invalid format');
     } catch (err) {
-      console.error('❌ AI JSON parsing error:', err.message);
-      console.error('❌ Raw AI text:', aiText);
-      return res.status(500).json({ error: 'AI returned invalid JSON.', message: err.message, raw: aiText });
+      console.error('❌ Failed to parse JSON:', err.message);
+      return res.status(500).json({ error: 'AI returned invalid JSON.', raw: aiText });
     }
 
     if (!pro && items.length > 3) items = items.slice(0, 3);
 
-    // 🔥 Update Leaderboard
+    // Update leaderboard
     items.forEach(item => {
-      const key = item?.name?.trim()?.toLowerCase();
+      const key = item?.name?.toLowerCase()?.trim();
       if (key) {
-        if (!leaderboard[key]) {
-          leaderboard[key] = { name: item.name, count: 1, category: item.category || 'Other' };
-        } else {
-          leaderboard[key].count += 1;
-        }
+        leaderboard[key] = leaderboard[key]
+          ? { ...leaderboard[key], count: leaderboard[key].count + 1 }
+          : { name: item.name, count: 1, category: item.category || 'General' };
       }
     });
 
     res.json({ items });
   } catch (err) {
-    console.error('🔥 Server error during analysis:', err.message || err);
-    res.status(500).json({ error: 'Server error during analysis.', message: err.message });
+    console.error('❌ Server error:', err.message);
+    res.status(500).json({ error: 'Backend error', message: err.message });
   }
 });
 
-// 🔥 Leaderboard Endpoint
 app.get('/leaderboard', (req, res) => {
   const top = Object.values(leaderboard)
     .sort((a, b) => b.count - a.count)
@@ -135,5 +158,4 @@ app.get('/leaderboard', (req, res) => {
   res.json({ top });
 });
 
-// 🔥 Start the Server
-app.listen(PORT, () => console.log(`🔥 TrendSniper backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 TrendSniper backend running on ${PORT}`));
