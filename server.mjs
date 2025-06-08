@@ -3,24 +3,47 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch';
 import { OpenAI } from 'openai';
+import rateLimit from 'express-rate-limit';
+import { createClient } from 'redis';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ✅ Redis Client Setup
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+// ✅ Middleware
 app.use(cors());
 app.use(express.json());
 
+app.use(rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60,
+  message: '🚫 Too many requests, slow down.',
+}));
+
+// ✅ Optional: API Key security
+app.use((req, res, next) => {
+  const key = req.headers['x-api-key'];
+  if (process.env.TSN_API_KEY && key !== process.env.TSN_API_KEY) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+  next();
+});
+
+// ✅ OpenRouter Client
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: 'https://openrouter.ai/api/v1',
 });
 
-const leaderboard = {};
-
+// 🔥 Health Check
 app.get('/', (req, res) => res.send('🔥 TrendSniper AI Backend Live'));
 
+// 🔥 Image Proxy
 app.get('/proxy', async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send('Missing URL');
@@ -40,7 +63,7 @@ app.get('/proxy', async (req, res) => {
   }
 });
 
-// 🔥 ANALYZE MULTI
+// 🔥 AI Analyzer
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro, type } = req.body;
@@ -49,64 +72,58 @@ app.post('/analyze-multi', async (req, res) => {
     }
 
     const limit = pro ? 10 : 3;
+    const prompt = type === 'products'
+      ? `You are a product research expert trained to detect high-potential and viral winning products from text content.
 
-    const prompt = type === 'products' ? `
-You are an AI expert in eCommerce and viral product trends.
+Analyze the following content and return a JSON array of up to ${limit} items with:
+- name
+- url
+- image
+- category
+- confidence (0–100)
+- adPlatform
+- adAngle
+- targetAudience
+- adScript
+- summary
+- verdict
+- advice
+- demandSignal
+- adQuality
+- trendTiming
+- engagement
 
-Analyze the following text to identify high-potential WINNING PRODUCTS.
-Each winning product should:
-- Have recent sales momentum
-- Target a specific audience
-- Use effective ad angles or wow factor
-- Have viral potential or uniqueness
+Rules:
+- Use all clues in the text: product titles, reviews, keywords, urgency, scarcity, trends, and marketing language.
+- For "confidence", base your judgment on signs of viral success.
+- Respond ONLY with a JSON array. No extra text.
 
-For each product, return:
-{
-  "name": "",
-  "url": "",
-  "image": "",
-  "category": "",
-  "confidence": 0-100,
-  "targetAudience": "",
-  "adAngle": "",
-  "adScript": "",
-  "verdict": "Winning" | "Too Late" | "Low Potential",
-  "advice": "",
-  "insights": ""
-}
+Content:
+"""${content.slice(0, 4000)}"""`
+      : `You are an expert ad intelligence system.
 
-Analyze the following content and return a VALID JSON ARRAY of max ${limit} items.
+Analyze the following content to detect high-converting or viral ads. Return a JSON array of up to ${limit} items with:
+- name
+- url
+- image
+- category
+- confidence (0–100)
+- adPlatform
+- adAngle
+- targetAudience
+- adScript
+- summary
+- verdict
+- advice
+- demandSignal
+- adQuality
+- trendTiming
+- engagement
 
-CONTENT:
-"""${content.slice(0, 4000)}"""
-` : `
-You are an AI ad analyst.
+Only return a VALID JSON array. No explanation or extra text.
 
-From the text below, detect ads with high potential to convert. Each should include:
-- What product or service is being advertised
-- Target audience
-- Ad script style
-- Ad angle (emotional, wow factor, practical)
-- Advice to improve it
-
-Return up to ${limit} items formatted as a VALID JSON ARRAY with:
-{
-  "name": "",
-  "url": "",
-  "image": "",
-  "category": "",
-  "confidence": 0-100,
-  "targetAudience": "",
-  "adAngle": "",
-  "adScript": "",
-  "verdict": "Good Ad" | "Average" | "Low Potential",
-  "advice": "",
-  "insights": ""
-}
-
-CONTENT:
-"""${content.slice(0, 4000)}"""
-`;
+Content:
+"""${content.slice(0, 4000)}"""`;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
@@ -116,46 +133,62 @@ CONTENT:
 
     const aiText = response.choices?.[0]?.message?.content?.trim();
     if (!aiText || aiText.length < 10) {
-      return res.status(500).json({ error: 'AI returned blank.' });
+      return res.status(500).json({ error: 'AI returned empty response.' });
     }
 
-    // Extract JSON Array
+    // ✅ Parse JSON array from AI
     let items;
     try {
-      const jsonStart = aiText.indexOf('[');
-      const jsonEnd = aiText.lastIndexOf(']');
-      const jsonString = aiText.slice(jsonStart, jsonEnd + 1);
-      items = JSON.parse(jsonString);
-      if (!Array.isArray(items)) throw new Error('Invalid format');
+      const start = aiText.indexOf('[');
+      const end = aiText.lastIndexOf(']');
+      const json = aiText.slice(start, end + 1);
+      items = JSON.parse(json);
+      if (!Array.isArray(items)) throw new Error('Invalid JSON array');
     } catch (err) {
-      console.error('❌ Failed to parse JSON:', err.message);
-      return res.status(500).json({ error: 'AI returned invalid JSON.', raw: aiText });
+      console.error('❌ AI JSON parse failed:', err.message);
+      return res.status(500).json({ error: 'AI returned invalid JSON', raw: aiText });
     }
 
     if (!pro && items.length > 3) items = items.slice(0, 3);
 
-    // Update leaderboard
-    items.forEach(item => {
-      const key = item?.name?.toLowerCase()?.trim();
-      if (key) {
-        leaderboard[key] = leaderboard[key]
-          ? { ...leaderboard[key], count: leaderboard[key].count + 1 }
-          : { name: item.name, count: 1, category: item.category || 'General' };
-      }
-    });
+    // ✅ Save to Redis leaderboard
+    for (const item of items) {
+      const key = `leaderboard:${item.name?.toLowerCase()?.trim()}`;
+      if (!key) continue;
+      await redis.hSet(key, {
+        name: item.name,
+        category: item.category || 'General'
+      });
+      await redis.hIncrBy(key, 'count', 1);
+    }
 
     res.json({ items });
   } catch (err) {
-    console.error('❌ Server error:', err.message);
-    res.status(500).json({ error: 'Backend error', message: err.message });
+    console.error('❌ Analysis Error:', err.message);
+    res.status(500).json({ error: 'Server error', message: err.message });
   }
 });
 
-app.get('/leaderboard', (req, res) => {
-  const top = Object.values(leaderboard)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
-  res.json({ top });
+// 🔥 Leaderboard from Redis
+app.get('/leaderboard', async (req, res) => {
+  try {
+    const keys = await redis.keys('leaderboard:*');
+    const entries = [];
+
+    for (const key of keys) {
+      const entry = await redis.hGetAll(key);
+      if (entry.name && entry.count) {
+        entry.count = parseInt(entry.count);
+        entries.push(entry);
+      }
+    }
+
+    entries.sort((a, b) => b.count - a.count);
+    res.json({ top: entries.slice(0, 10) });
+  } catch (err) {
+    console.error('❌ Leaderboard error:', err.message);
+    res.status(500).json({ error: 'Leaderboard failed' });
+  }
 });
 
-app.listen(PORT, () => console.log(`🚀 TrendSniper backend running on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 TrendSniper backend live on port ${PORT}`));
