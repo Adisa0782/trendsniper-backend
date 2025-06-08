@@ -19,13 +19,14 @@ await redis.connect();
 app.use(cors());
 app.use(express.json());
 
+// ✅ Rate Limiting
 app.use(rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 60,
   message: '🚫 Too many requests, slow down.',
 }));
 
-// ✅ Optional: API Key security
+// ✅ Optional: API Key Protection
 app.use((req, res, next) => {
   const key = req.headers['x-api-key'];
   if (process.env.TSN_API_KEY && key !== process.env.TSN_API_KEY) {
@@ -34,16 +35,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ OpenRouter Client
+// ✅ OpenRouter API
 const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   baseURL: 'https://openrouter.ai/api/v1',
 });
 
-// 🔥 Health Check
+// ✅ Health Check
 app.get('/', (req, res) => res.send('🔥 TrendSniper AI Backend Live'));
 
-// 🔥 Image Proxy
+// ✅ Proxy for Images
 app.get('/proxy', async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send('Missing URL');
@@ -63,7 +64,7 @@ app.get('/proxy', async (req, res) => {
   }
 });
 
-// 🔥 AI Analyzer
+// ✅ Core AI Analysis Endpoint
 app.post('/analyze-multi', async (req, res) => {
   try {
     const { content, pro, type } = req.body;
@@ -72,6 +73,7 @@ app.post('/analyze-multi', async (req, res) => {
     }
 
     const limit = pro ? 10 : 3;
+
     const prompt = type === 'products'
       ? `You are a product research expert trained to detect high-potential and viral winning products from text content.
 
@@ -136,7 +138,6 @@ Content:
       return res.status(500).json({ error: 'AI returned empty response.' });
     }
 
-    // ✅ Parse JSON array from AI
     let items;
     try {
       const start = aiText.indexOf('[');
@@ -151,7 +152,6 @@ Content:
 
     if (!pro && items.length > 3) items = items.slice(0, 3);
 
-    // ✅ Save to Redis leaderboard
     for (const item of items) {
       const key = `leaderboard:${item.name?.toLowerCase()?.trim()}`;
       if (!key) continue;
@@ -169,7 +169,7 @@ Content:
   }
 });
 
-// 🔥 Leaderboard from Redis
+// ✅ Leaderboard Endpoint
 app.get('/leaderboard', async (req, res) => {
   try {
     const keys = await redis.keys('leaderboard:*');
