@@ -7,7 +7,6 @@ import rateLimit from 'express-rate-limit';
 import { createClient } from 'redis';
 
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -21,12 +20,12 @@ app.use(express.json());
 
 // ✅ Rate Limiting
 app.use(rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
   max: 60,
   message: '🚫 Too many requests, slow down.',
 }));
 
-// ✅ Optional: API Key Protection
+// ✅ Optional API Key Protection
 app.use((req, res, next) => {
   const key = req.headers['x-api-key'];
   if (process.env.TSN_API_KEY && key !== process.env.TSN_API_KEY) {
@@ -44,7 +43,7 @@ const openai = new OpenAI({
 // ✅ Health Check
 app.get('/', (req, res) => res.send('🔥 TrendSniper AI Backend Live'));
 
-// ✅ Proxy for Images
+// ✅ Image Proxy
 app.get('/proxy', async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl) return res.status(400).send('Missing URL');
@@ -52,8 +51,8 @@ app.get('/proxy', async (req, res) => {
     const response = await fetch(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0',
-        'Referer': 'https://www.aliexpress.com'
-      }
+        'Referer': 'https://www.aliexpress.com',
+      },
     });
     if (!response.ok) throw new Error(`Proxy failed: ${response.status}`);
     res.set('Content-Type', response.headers.get('Content-Type'));
@@ -64,15 +63,16 @@ app.get('/proxy', async (req, res) => {
   }
 });
 
-// ✅ Core AI Analysis Endpoint
+// ✅ Core AI Analysis
 app.post('/analyze-multi', async (req, res) => {
   try {
-    const { content, pro, type } = req.body;
+    const { content, pro, type, videos = [] } = req.body;
     if (!content || content.length < 30) {
       return res.status(400).json({ error: 'Too little content' });
     }
 
     const limit = pro ? 10 : 3;
+    const hasVideo = videos.length > 0;
 
     const prompt = type === 'products'
       ? `You are a product research expert trained to detect high-potential and viral winning products from text content.
@@ -95,13 +95,16 @@ Analyze the following content and return a JSON array of up to ${limit} items wi
 - trendTiming
 - engagement
 
+Video Presence: ${hasVideo ? 'Yes' : 'No'}
+
 Rules:
-- Use all clues in the text: product titles, reviews, keywords, urgency, scarcity, trends, and marketing language.
+- Use clues like video presence, urgency, review quality, pricing, etc.
 - For "confidence", base your judgment on signs of viral success.
-- Respond ONLY with a JSON array. No extra text.
+- Respond ONLY with a valid JSON array. No extra text.
 
 Content:
 """${content.slice(0, 4000)}"""`
+
       : `You are an expert ad intelligence system.
 
 Analyze the following content to detect high-converting or viral ads. Return a JSON array of up to ${limit} items with:
@@ -121,6 +124,8 @@ Analyze the following content to detect high-converting or viral ads. Return a J
 - adQuality
 - trendTiming
 - engagement
+
+Video Presence: ${hasVideo ? 'Yes' : 'No'}
 
 Only return a VALID JSON array. No explanation or extra text.
 
@@ -152,7 +157,14 @@ Content:
 
     if (!pro && items.length > 3) items = items.slice(0, 3);
 
-    for (const item of items) {
+    // ✅ Append hasVideo field for frontend rendering
+    const enrichedItems = items.map(item => ({
+      ...item,
+      hasVideo: hasVideo
+    }));
+
+    // ✅ Save leaderboard
+    for (const item of enrichedItems) {
       const key = `leaderboard:${item.name?.toLowerCase()?.trim()}`;
       if (!key) continue;
       await redis.hSet(key, {
@@ -162,14 +174,14 @@ Content:
       await redis.hIncrBy(key, 'count', 1);
     }
 
-    res.json({ items });
+    res.json({ items: enrichedItems });
   } catch (err) {
     console.error('❌ Analysis Error:', err.message);
     res.status(500).json({ error: 'Server error', message: err.message });
   }
 });
 
-// ✅ Leaderboard Endpoint
+// ✅ Leaderboard
 app.get('/leaderboard', async (req, res) => {
   try {
     const keys = await redis.keys('leaderboard:*');
