@@ -72,65 +72,56 @@ app.post('/analyze-multi', async (req, res) => {
     }
 
     const limit = pro ? 10 : 3;
-    const hasVideo = videos.length > 0;
+    const hasVideo = videos.length > 0
 
     const prompt = type === 'products'
-      ? `You are a product research expert trained to detect high-potential and viral winning products from text content.
+  ? `You are an expert product analysis AI.
 
-Analyze the following content and return a JSON array of up to ${limit} items with:
-- name
-- url
-- image
-- category
-- confidence (0–100)
-- adPlatform
-- adAngle
-- targetAudience
-- adScript
-- summary
-- verdict
-- advice
-- demandSignal
-- adQuality
-- trendTiming
-- engagement
+The following input includes structured data from a product page:
+- Title
+- Price
+- Image
+- Reviews
+- Full visible text
+
+Analyze this and return a JSON array of up to ${limit} potential winning products.
+
+Each item should include:
+- name, url, image, category, confidence (0–100)
+- adPlatform, adAngle, targetAudience, adScript
+- summary, verdict, advice
+- demandSignal, adQuality, trendTiming, engagement
 
 Video Presence: ${hasVideo ? 'Yes' : 'No'}
 
-Rules:
-- Use clues like video presence, urgency, review quality, pricing, etc.
-- For "confidence", base your judgment on signs of viral success.
-- Respond ONLY with a valid JSON array. No extra text.
+Only return a valid JSON array. Do not include extra commentary.
 
 Content:
-"""${content.slice(0, 4000)}"""`
+"""${content.slice(0, 1800)}"""`
 
-      : `You are an expert ad intelligence system.
+  : `You are an expert ad intelligence system.
 
-Analyze the following content to detect high-converting or viral ads. Return a JSON array of up to ${limit} items with:
-- name
-- url
-- image
-- category
-- confidence (0–100)
-- adPlatform
-- adAngle
-- targetAudience
-- adScript
-- summary
-- verdict
-- advice
-- demandSignal
-- adQuality
-- trendTiming
-- engagement
+The following input includes structured data from an ad landing page:
+- Title
+- Price
+- Image
+- Reviews
+- Full visible page text
+
+Analyze the ad and detect any high-converting or viral promotions. Return a JSON array of up to ${limit} ads.
+
+Each item must include:
+- name, url, image, category, confidence (0–100)
+- adPlatform, adAngle, targetAudience, adScript
+- summary, verdict, advice
+- demandSignal, adQuality, trendTiming, engagement
 
 Video Presence: ${hasVideo ? 'Yes' : 'No'}
 
-Only return a VALID JSON array. No explanation or extra text.
+Only return a valid JSON array. Do not include any explanation.
 
 Content:
-"""${content.slice(0, 4000)}"""`;
+"""${content.slice(0, 1800)}"""`;
 
     const response = await openai.chat.completions.create({
       model: pro ? 'openai/gpt-4-1106-preview' : 'mistralai/mistral-7b-instruct:free',
