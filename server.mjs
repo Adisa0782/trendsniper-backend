@@ -4,15 +4,18 @@ import dotenv from 'dotenv';
 import fetch from 'node-fetch';
 import { OpenAI } from 'openai';
 import rateLimit from 'express-rate-limit';
-import { createClient } from 'redis';
+import { MongoClient } from 'mongodb';
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ✅ Redis Client Setup
-const redis = createClient({ url: process.env.REDIS_URL });
-await redis.connect();
+// ✅ MongoDB Setup
+const mongoClient = new MongoClient(process.env.MONGODB_URL);
+await mongoClient.connect();
+const db = mongoClient.db('trendsniper');
+const leaderboardCol = db.collection('leaderboard');
+console.log('✅ MongoDB connected');
 
 // ✅ Middleware
 app.use(cors());
@@ -72,10 +75,10 @@ app.post('/analyze-multi', async (req, res) => {
     }
 
     const limit = pro ? 10 : 3;
-    const hasVideo = videos.length > 0
+    const hasVideo = videos.length > 0;
 
     const prompt = type === 'products'
-  ? `You are an expert product analysis AI.
+      ? `You are an expert product analysis AI.
 
 The following input includes structured data from a product page:
 - Title
@@ -99,7 +102,7 @@ Only return a valid JSON array. Do not include extra commentary.
 Content:
 """${content.slice(0, 1800)}"""`
 
-  : `You are an expert ad intelligence system.
+      : `You are an expert ad intelligence system.
 
 The following input includes structured data from an ad landing page:
 - Title
@@ -148,21 +151,28 @@ Content:
 
     if (!pro && items.length > 3) items = items.slice(0, 3);
 
-    // ✅ Append hasVideo field for frontend rendering
+    // ✅ Append hasVideo field
     const enrichedItems = items.map(item => ({
       ...item,
       hasVideo: hasVideo
     }));
 
-    // ✅ Save leaderboard
+    // ✅ Save to MongoDB leaderboard
     for (const item of enrichedItems) {
-      const key = `leaderboard:${item.name?.toLowerCase()?.trim()}`;
-      if (!key) continue;
-      await redis.hSet(key, {
-        name: item.name,
-        category: item.category || 'General'
-      });
-      await redis.hIncrBy(key, 'count', 1);
+      if (!item.name) continue;
+      const nameKey = item.name.toLowerCase().trim();
+      await leaderboardCol.updateOne(
+        { nameKey },
+        {
+          $set: {
+            name: item.name,
+            category: item.category || 'General',
+            nameKey
+          },
+          $inc: { count: 1 }
+        },
+        { upsert: true }
+      );
     }
 
     res.json({ items: enrichedItems });
@@ -175,19 +185,13 @@ Content:
 // ✅ Leaderboard
 app.get('/leaderboard', async (req, res) => {
   try {
-    const keys = await redis.keys('leaderboard:*');
-    const entries = [];
+    const entries = await leaderboardCol
+      .find({})
+      .sort({ count: -1 })
+      .limit(10)
+      .toArray();
 
-    for (const key of keys) {
-      const entry = await redis.hGetAll(key);
-      if (entry.name && entry.count) {
-        entry.count = parseInt(entry.count);
-        entries.push(entry);
-      }
-    }
-
-    entries.sort((a, b) => b.count - a.count);
-    res.json({ top: entries.slice(0, 10) });
+    res.json({ top: entries });
   } catch (err) {
     console.error('❌ Leaderboard error:', err.message);
     res.status(500).json({ error: 'Leaderboard failed' });
